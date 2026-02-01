@@ -10,22 +10,19 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         body { font-family: 'Geist', sans-serif; background: #000; color: #fff; overflow: hidden; margin: 0; }
         .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(25px); border: 1px solid rgba(255, 255, 255, 0.08); }
         .tab-bar { padding-bottom: env(safe-area-inset-bottom); background: rgba(10, 10, 10, 0.85); backdrop-filter: blur(20px); border-top: 1px solid rgba(255, 255, 255, 0.05); }
-        
-        /* Biometria */
         .kyc-frame { border: 2px solid rgba(99, 102, 241, 0.4); border-radius: 40px; position: relative; overflow: hidden; aspect-ratio: 3/4; }
         .kyc-scan-line { position: absolute; width: 100%; height: 4px; background: linear-gradient(to bottom, transparent, #6366f1); box-shadow: 0 0 20px #6366f1; animation: kyc-scan 3s infinite ease-in-out; z-index: 20; }
         @keyframes kyc-scan { 0%, 100% { top: 0%; opacity: 0; } 50% { top: 100%; opacity: 1; } }
-        
-        /* Grelha - Removida a transição "horrível" para ser instantânea */
-        .photo-grid { display: grid; gap: 8px; }
-        
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .safe-top { padding-top: env(safe-area-inset-top); }
-        .photo-viewer-content { max-width: 100%; max-height: 75vh; object-fit: contain; }
+        .responsive-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+        @media (min-width: 640px) { .responsive-grid { grid-template-columns: repeat(3, 1fr); } }
+        @media (min-width: 1024px) { .responsive-grid { grid-template-columns: repeat(5, 1fr); } }
     </style>
 </head>
 <body>
@@ -42,7 +39,8 @@
             Zap: ({ active }) => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={active ? "#818cf8" : "#52525b"} strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
             Grid: ({ active }) => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={active ? "#818cf8" : "#52525b"} strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>,
             X: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>,
-            Chevron: ({ left }) => <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{transform: left ? 'rotate(180deg)' : ''}}><polyline points="9 18 15 12 9 6"/></svg>
+            Chevron: ({ left }) => <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{transform: left ? 'rotate(180deg)' : ''}}><polyline points="9 18 15 12 9 6"/></svg>,
+            Check: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="4"><polyline points="20 6 9 17 4 12"/></svg>
         };
 
         const App = () => {
@@ -52,7 +50,8 @@
             const [isScanning, setIsScanning] = useState(false);
             const [showKYC, setShowKYC] = useState(false);
             const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(null);
-            const [gridCols, setGridCols] = useState(2);
+            const [selectionMode, setSelectionMode] = useState(false);
+            const [selectedIds, setSelectedIds] = useState([]);
             
             const videoRef = useRef(null);
             const multiUploadRef = useRef(null);
@@ -60,12 +59,14 @@
             useEffect(() => {
                 const init = async () => {
                     const URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
-                    await Promise.all([
-                        faceapi.nets.ssdMobilenetv1.loadFromUri(URL),
-                        faceapi.nets.faceLandmark68Net.loadFromUri(URL),
-                        faceapi.nets.faceRecognitionNet.loadFromUri(URL)
-                    ]);
-                    fetchPhotos();
+                    try {
+                        await Promise.all([
+                            faceapi.nets.ssdMobilenetv1.loadFromUri(URL),
+                            faceapi.nets.faceLandmark68Net.loadFromUri(URL),
+                            faceapi.nets.faceRecognitionNet.loadFromUri(URL)
+                        ]);
+                        fetchPhotos();
+                    } catch(e) { console.error("Erro ao carregar modelos AI", e); }
                 };
                 init();
             }, []);
@@ -75,17 +76,19 @@
                     const res = await fetch(`${SERVER_URL}/api/photos.php`);
                     const data = await res.json();
                     setPhotos(data || []);
-                } catch(e) { console.error("Erro fetch"); }
+                } catch(e) { console.error("Erro fetch fotos"); }
             };
 
             const handleUploadProcess = async (files) => {
+                if (!files.length) return;
                 setIsScanning(true);
                 const formData = new FormData();
                 for (const f of files) {
                     const img = await faceapi.bufferToImage(f);
-                    const det = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+                    const detections = await faceapi.detectAllFaces(img).withFaceLandmarks().withFaceDescriptors();
                     formData.append('fotos[]', f);
-                    formData.append('descriptors[]', det ? JSON.stringify(Array.from(det.descriptor)) : "");
+                    const descriptors = detections.map(d => Array.from(d.descriptor));
+                    formData.append('descriptors[]', JSON.stringify(descriptors));
                 }
                 await fetch(`${SERVER_URL}/api/upload.php`, { method: 'POST', body: formData });
                 fetchPhotos();
@@ -101,11 +104,14 @@
                 if (!detection) {
                     alert("Rosto não detetado");
                 } else {
-                    const userDesc = detection.descriptor;
+                    const matcher = new faceapi.FaceMatcher(detection, 0.6);
                     const matches = photos.filter(p => {
                         if (!p.descriptor) return false;
-                        const d = faceapi.euclideanDistance(userDesc, new Float32Array(Object.values(JSON.parse(p.descriptor))));
-                        return d < 0.6;
+                        try {
+                            const data = JSON.parse(p.descriptor);
+                            const list = Array.isArray(data[0]) ? data : [data];
+                            return list.some(d => matcher.findBestMatch(new Float32Array(Object.values(d))).label !== 'unknown');
+                        } catch(e) { return false; }
                     });
                     setFilteredPhotos(matches);
                     setView('gallery');
@@ -114,38 +120,69 @@
                 setShowKYC(false);
             };
 
+            const handleDownloadZip = async () => {
+                const targets = selectionMode && selectedIds.length > 0
+                    ? photos.filter(p => selectedIds.includes(p.id)) 
+                    : (filteredPhotos || photos);
+                
+                if (!targets.length) return;
+                setIsScanning(true);
+                const zip = new JSZip();
+                for (const p of targets) {
+                    const imgRes = await fetch(`${SERVER_URL}/${p.url}`);
+                    const blob = await imgRes.blob();
+                    zip.file(`wedding_${p.id}.jpg`, blob);
+                }
+                const content = await zip.generateAsync({type:"blob"});
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(content);
+                link.download = "wedding_memories.zip";
+                link.click();
+                setIsScanning(false);
+                setSelectionMode(false);
+                setSelectedIds([]);
+            };
+
+            const handleShare = async (p) => {
+                if (navigator.share) {
+                    try {
+                        await navigator.share({ title: 'Wedding AI Memory', url: `${SERVER_URL}/${p.url}` });
+                    } catch (e) { console.log("Partilha cancelada"); }
+                } else {
+                    alert("O seu navegador não suporta a função de partilha nativa.");
+                }
+            };
+
+            const toggleSelect = (id) => {
+                setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+            };
+
             const currentList = filteredPhotos || photos;
 
             return (
-                <div className="h-screen w-full flex flex-col bg-black">
+                <div className="h-screen w-full flex flex-col bg-black text-white">
                     <input type="file" multiple ref={multiUploadRef} className="hidden" onChange={(e) => handleUploadProcess(Array.from(e.target.files))} />
 
-                    {/* Header */}
                     <div className="safe-top px-8 pt-8 pb-4 flex justify-between items-end border-b border-white/5 bg-black/50 backdrop-blur-md sticky top-0 z-30">
-                        <div onClick={() => {setView('home'); setFilteredPhotos(null);}}>
+                        <div onClick={() => {setView('home'); setFilteredPhotos(null); setSelectionMode(false);}} className="cursor-pointer">
                             <p className="text-[10px] font-black tracking-[.3em] text-zinc-600 uppercase italic">Neural Wedding</p>
-                            <h1 className="text-xl font-bold tracking-tighter">{view === 'home' ? 'Protocolo' : 'Galeria'}</h1>
+                            <h1 className="text-xl font-bold tracking-tighter">
+                                {selectionMode ? `${selectedIds.length} Selecionadas` : (view === 'home' ? 'Protocolo' : 'Galeria')}
+                            </h1>
                         </div>
                         {view === 'gallery' && (
-                            <div className="flex gap-2">
-                                <button onClick={() => setGridCols(gridCols === 2 ? 4 : gridCols === 4 ? 1 : 2)} className="p-2 glass rounded-lg text-indigo-400">
-                                    <Icons.Grid active={true} />
+                            <div className="flex gap-2 items-center">
+                                <button onClick={() => {setSelectionMode(!selectionMode); setSelectedIds([]);}} 
+                                    className={`text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full transition-all ${selectionMode ? 'bg-indigo-500 text-white' : 'glass text-zinc-500'}`}>
+                                    {selectionMode ? 'Cancelar' : 'Selecionar'}
                                 </button>
-                                <button onClick={() => {
-                                    currentList.forEach((p, i) => {
-                                        setTimeout(() => {
-                                            const a = document.createElement('a');
-                                            a.href = `${SERVER_URL}/${p.url}`;
-                                            a.download = `photo_${p.id}.jpg`;
-                                            a.click();
-                                        }, i * 300);
-                                    });
-                                }} className="p-2 glass rounded-lg text-white"><Icons.Download /></button>
+                                <button onClick={handleDownloadZip} className="p-2 glass rounded-lg text-indigo-400">
+                                    <Icons.Download />
+                                </button>
                             </div>
                         )}
                     </div>
 
-                    {/* Main Area */}
                     <div className="flex-1 overflow-y-auto px-4 pb-32 no-scrollbar">
                         {view === 'home' ? (
                             <div className="space-y-6 pt-6 px-4">
@@ -153,12 +190,12 @@
                                     setShowKYC(true);
                                     navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
                                         .then(stream => { if(videoRef.current) videoRef.current.srcObject = stream; });
-                                }} className="glass p-10 rounded-[40px] flex flex-col items-center border-indigo-500/20 active:scale-95 transition-all">
+                                }} className="glass p-10 rounded-[40px] flex flex-col items-center border-indigo-500/20 active:scale-95 transition-all cursor-pointer">
                                     <Icons.Scan />
                                     <h2 className="text-xl font-black italic mt-4 uppercase">Neural Find</h2>
                                     <p className="text-xs text-zinc-500 text-center mt-2">Identifique-se para encontrar as suas fotos.</p>
                                 </div>
-                                <div onClick={() => multiUploadRef.current.click()} className="glass p-6 rounded-3xl flex items-center justify-between active:bg-white/5 transition-all">
+                                <div onClick={() => multiUploadRef.current.click()} className="glass p-6 rounded-3xl flex items-center justify-between active:bg-white/5 transition-all cursor-pointer">
                                     <div className="flex items-center gap-4">
                                         <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center"><Icons.Share /></div>
                                         <span className="font-bold">Partilhar Memórias</span>
@@ -174,10 +211,17 @@
                                         <button onClick={() => setFilteredPhotos(null)} className="text-[10px] font-bold text-zinc-500 underline uppercase italic">Ver Todas</button>
                                     </div>
                                 )}
-                                <div className="photo-grid" style={{gridTemplateColumns: `repeat(${gridCols}, 1fr)`}}>
+                                <div className="responsive-grid">
                                     {currentList.map((p, i) => (
-                                        <div key={p.id} onClick={() => setSelectedPhotoIndex(i)} className="aspect-[4/5] rounded-xl overflow-hidden glass">
-                                            <img src={`${SERVER_URL}/${p.url}`} className="w-full h-full object-cover" loading="lazy" />
+                                        <div key={p.id} 
+                                            onClick={() => selectionMode ? toggleSelect(p.id) : setSelectedPhotoIndex(i)} 
+                                            className="relative aspect-[4/5] rounded-xl overflow-hidden glass cursor-pointer active:scale-95 transition-transform">
+                                            <img src={`${SERVER_URL}/${p.url}`} className={`w-full h-full object-cover transition-opacity ${selectedIds.includes(p.id) ? 'opacity-40' : 'opacity-100'}`} loading="lazy" />
+                                            {selectionMode && (
+                                                <div className={`absolute top-2 right-2 w-6 h-6 rounded-full border-2 flex items-center justify-center ${selectedIds.includes(p.id) ? 'bg-indigo-500 border-indigo-500 shadow-[0_0_10px_#6366f1]' : 'border-white/30 bg-black/20'}`}>
+                                                    {selectedIds.includes(p.id) && <Icons.Check />}
+                                                </div>
+                                            )}
                                         </div>
                                     ))}
                                 </div>
@@ -185,7 +229,6 @@
                         )}
                     </div>
 
-                    {/* Biometria */}
                     {showKYC && (
                         <div className="fixed inset-0 z-[100] bg-black p-6 flex flex-col justify-center items-center">
                             <div className="w-full max-w-sm">
@@ -197,7 +240,7 @@
                                     }}><Icons.X /></button>
                                 </div>
                                 <div className="kyc-frame glass shadow-[0_0_80px_rgba(99,102,241,0.2)]">
-                                    <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover grayscale" />
+                                    <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
                                     <div className="kyc-scan-line"></div>
                                 </div>
                                 <button onClick={processKYC} className="w-full mt-8 h-16 bg-white text-black rounded-3xl font-black uppercase text-xs tracking-[0.2em]">Analisar</button>
@@ -205,52 +248,47 @@
                         </div>
                     )}
 
-                    {/* Slider / Visualizador */}
                     {selectedPhotoIndex !== null && (
-                        <div className="fixed inset-0 z-[200] bg-black/98 flex flex-col justify-between py-12">
+                        <div className="fixed inset-0 z-[200] bg-black flex flex-col justify-between py-12">
                             <div className="w-full px-8 flex justify-between items-center">
-                                <span className="text-[10px] font-black text-zinc-500">{selectedPhotoIndex + 1} / {currentList.length}</span>
-                                <button onClick={() => setSelectedPhotoIndex(null)} className="p-2 glass rounded-full"><Icons.X /></button>
+                                <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{selectedPhotoIndex + 1} / {currentList.length}</span>
+                                <button onClick={() => setSelectedPhotoIndex(null)} className="p-3 glass rounded-full"><Icons.X /></button>
                             </div>
-                            
                             <div className="relative flex-1 flex items-center justify-center p-4">
-                                <button onClick={() => setSelectedPhotoIndex(Math.max(0, selectedPhotoIndex - 1))} className="absolute left-4 z-10 p-3 glass rounded-full opacity-60"><Icons.Chevron left /></button>
-                                <img src={`${SERVER_URL}/${currentList[selectedPhotoIndex].url}`} className="photo-viewer-content rounded-2xl shadow-2xl" />
-                                <button onClick={() => setSelectedPhotoIndex(Math.min(currentList.length - 1, selectedPhotoIndex + 1))} className="absolute right-4 z-10 p-3 glass rounded-full opacity-60"><Icons.Chevron /></button>
+                                <button onClick={() => setSelectedPhotoIndex(Math.max(0, selectedPhotoIndex - 1))} className="absolute left-4 z-10 p-4 bg-white/5 rounded-full backdrop-blur-md"><Icons.Chevron left /></button>
+                                <img src={`${SERVER_URL}/${currentList[selectedPhotoIndex].url}`} className="max-w-full max-h-[70vh] object-contain rounded-2xl shadow-2xl" />
+                                <button onClick={() => setSelectedPhotoIndex(Math.min(currentList.length - 1, selectedPhotoIndex + 1))} className="absolute right-4 z-10 p-4 bg-white/5 rounded-full backdrop-blur-md"><Icons.Chevron /></button>
                             </div>
-
                             <div className="flex justify-center gap-10 px-12">
                                 <button onClick={() => {
                                     const a = document.createElement('a');
                                     a.href = `${SERVER_URL}/${currentList[selectedPhotoIndex].url}`;
-                                    a.download = `wedding_${currentList[selectedPhotoIndex].id}.jpg`;
+                                    a.download = `wedding_photo.jpg`;
                                     a.click();
-                                }} className="p-5 glass rounded-full"><Icons.Download /></button>
-                                <button className="p-5 glass rounded-full"><Icons.Share /></button>
+                                }} className="p-6 glass rounded-full active:scale-90 transition-transform"><Icons.Download /></button>
+                                <button onClick={() => handleShare(currentList[selectedPhotoIndex])} className="p-6 glass rounded-full active:scale-90 transition-transform"><Icons.Share /></button>
                             </div>
                         </div>
                     )}
 
-                    {/* Menu Inferior Original */}
                     <nav className="fixed bottom-0 w-full tab-bar flex justify-around items-center h-24 px-10 z-50">
-                        <div onClick={() => { setView('home'); setFilteredPhotos(null); }} className="flex flex-col items-center gap-1.5 cursor-pointer">
+                        <div onClick={() => { setView('home'); setFilteredPhotos(null); setSelectionMode(false); }} className="flex flex-col items-center gap-1.5 cursor-pointer">
                             <Icons.Zap active={view === 'home'} />
                             <span className={`text-[9px] font-black uppercase tracking-widest ${view === 'home' ? 'text-indigo-400' : 'text-zinc-600'}`}>Início</span>
                         </div>
                         <div onClick={() => multiUploadRef.current.click()} className="relative -translate-y-6 w-16 h-16 bg-white text-black rounded-full flex items-center justify-center shadow-2xl border-[6px] border-[#0a0a0a] cursor-pointer active:scale-90 transition-transform">
                             <Icons.Camera />
                         </div>
-                        <div onClick={() => { setView('gallery'); setFilteredPhotos(null); }} className="flex flex-col items-center gap-1.5 cursor-pointer">
+                        <div onClick={() => { setView('gallery'); setFilteredPhotos(null); setSelectionMode(false); }} className="flex flex-col items-center gap-1.5 cursor-pointer">
                             <Icons.Grid active={view === 'gallery'} />
                             <span className={`text-[9px] font-black uppercase tracking-widest ${view === 'gallery' ? 'text-indigo-400' : 'text-zinc-600'}`}>Galeria</span>
                         </div>
                     </nav>
 
-                    {/* Loading */}
                     {isScanning && (
                         <div className="fixed inset-0 z-[300] bg-black/95 flex flex-col items-center justify-center">
                             <div className="w-16 h-16 border-t-2 border-indigo-500 rounded-full animate-spin"></div>
-                            <h3 className="text-[10px] font-black text-indigo-400 mt-6 uppercase animate-pulse">Sincronização Neural</h3>
+                            <h3 className="text-[10px] font-black text-indigo-400 mt-6 uppercase animate-pulse tracking-[0.3em]">Sincronização Neural</h3>
                         </div>
                     )}
                 </div>
