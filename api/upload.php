@@ -1,7 +1,10 @@
 <?php
 header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type");
 header("Content-Type: application/json; charset=UTF-8");
-header("Access-Control-Allow-Methods: POST");
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') exit;
 
 require_once '../config/database.php';
 
@@ -11,50 +14,40 @@ $db = $database->getConnection();
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['foto'])) {
     $file = $_FILES['foto'];
     
-    // 1. Validações de Segurança
-    $max_size = 5 * 1024 * 1024; // 5MB
-    $allowed_extensions = ['jpg', 'jpeg', 'png', 'webp'];
-    $file_info = pathinfo($file['name']);
-    $extension = strtolower($file_info['extension']);
-
-    if ($file['size'] > $max_size) {
-        echo json_encode(["error" => "Ficheiro demasiado grande (Máx 5MB)"]);
-        exit;
+    // No Mac/Linux, usamos a barra normal /
+    $upload_dir = dirname(__DIR__) . '/uploads/';
+    
+    // Verifica se a pasta existe
+    if (!file_exists($upload_dir)) {
+        mkdir($upload_dir, 0777, true);
     }
 
-    if (!in_array($extension, $allowed_extensions)) {
-        echo json_encode(["error" => "Formato não suportado"]);
-        exit;
-    }
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    $new_name = bin2hex(random_bytes(10)) . "." . $ext;
+    $target = $upload_dir . $new_name;
 
-    // 2. Caminhos
-    $upload_dir = "../uploads/";
-    // Gerar nome único para evitar conflitos e ataques de overwrite
-    $unique_name = bin2hex(random_bytes(10)) . "." . $extension;
-    $target_path = $upload_dir . $unique_name;
-
-    if (move_uploaded_file($file['tmp_name'], $target_path)) {
+    if (move_uploaded_file($file['tmp_name'], $target)) {
         try {
-            // Guardamos o caminho que o frontend vai usar para exibir (relativo à raiz)
-            $public_url = "uploads/" . $unique_name;
-            
-            $query = "INSERT INTO fotos (url) VALUES (:url)";
+            $public_url = "uploads/" . $new_name;
+            $query = "INSERT INTO fotos (url, facial_id) VALUES (:url, NULL)";
             $stmt = $db->prepare($query);
             $stmt->bindParam(':url', $public_url);
             
             if ($stmt->execute()) {
-                echo json_encode([
-                    "success" => true, 
-                    "message" => "Upload concluído",
-                    "url" => $public_url
-                ]);
+                echo json_encode(["success" => true, "url" => $public_url]);
             }
         } catch (PDOException $e) {
-            echo json_encode(["error" => "Erro na base de dados: " . $e->getMessage()]);
+            echo json_encode(["error" => "Erro DB: " . $e->getMessage()]);
         }
     } else {
-        echo json_encode(["error" => "Falha ao mover ficheiro"]);
+        // Diagnóstico para Mac
+        echo json_encode([
+            "error" => "Permissão negada no Mac",
+            "check" => "Executa 'chmod -R 777 uploads' no terminal dentro da pasta do projeto",
+            "path_tentado" => $target,
+            "writable" => is_writable($upload_dir)
+        ]);
     }
 } else {
-    echo json_encode(["error" => "Pedido inválido"]);
+    echo json_encode(["error" => "Ficheiro não recebido"]);
 }

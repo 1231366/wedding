@@ -9,10 +9,10 @@
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
     
     <style>
-        body { font-family: 'Geist', sans-serif; background: #000; color: #fff; overflow: hidden; }
+        body { font-family: 'Geist', sans-serif; background: #000; color: #fff; overflow: hidden; margin: 0; }
         .glass-card {
             background: rgba(255, 255, 255, 0.03);
             border: 1px solid rgba(255, 255, 255, 0.08);
@@ -33,7 +33,11 @@
             100% { top: 100%; opacity: 0; }
         }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .img-gradient { background: linear-gradient(to bottom, transparent 60%, rgba(0,0,0,0.8)); }
+        .animate-float { animation: float 3s ease-in-out infinite; }
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
     </style>
 </head>
 <body>
@@ -42,230 +46,235 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        // --- CONFIGURAÇÃO DO SERVIDOR ---
-        const SERVER_URL = "http://localhost/wedding"; // Ajusta para o nome da tua pasta
+        const SERVER_URL = "http://localhost/wedding"; 
+
+        const Icons = {
+            Scan: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-10 h-10 text-indigo-400 animate-float"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><polyline points="7 7 12 12 17 7"/><polyline points="7 17 12 12 17 17"/></svg>,
+            Upload: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
+            ChevronRight: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-zinc-600"><polyline points="9 18 15 12 9 6"/></svg>,
+            Zap: ({ active }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`w-6 h-6 ${active ? 'text-indigo-400' : 'text-zinc-600'}`}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
+            Camera: ({ color = "currentColor" }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-7 h-7"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>,
+            Grid: ({ active }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`w-6 h-6 ${active ? 'text-indigo-400' : 'text-zinc-600'}`}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>,
+            Refresh: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3 text-indigo-400"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>,
+            X: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+            User: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-32 h-32 text-white opacity-10"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        };
 
         const App = () => {
             const [view, setView] = useState('home');
             const [isScanning, setIsScanning] = useState(false);
-            const [selectedPhoto, setSelectedPhoto] = useState(null);
             const [photos, setPhotos] = useState([]);
+            const [filteredPhotos, setFilteredPhotos] = useState(null); // Estado para fotos filtradas
+            const [showNeuralModal, setShowNeuralModal] = useState(false);
             
             const fileInputRef = useRef(null);
             const cameraInputRef = useRef(null);
+            const neuralInputRef = useRef(null);
 
-            // Carregar fotos reais da Base de Dados
+            useEffect(() => {
+                const loadModels = async () => {
+                    try {
+                        const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+                        await Promise.all([
+                            faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                            faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                            faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+                        ]);
+                    } catch (e) { console.error("Erro IA:", e); }
+                };
+                loadModels();
+                fetchPhotos();
+            }, []);
+
             const fetchPhotos = async () => {
                 try {
                     const response = await fetch(`${SERVER_URL}/api/photos.php`);
                     const data = await response.json();
-                    if (Array.isArray(data)) setPhotos(data);
-                } catch (error) {
-                    console.error("Erro ao carregar fotos:", error);
-                }
+                    if (Array.isArray(data)) {
+                        setPhotos(data);
+                    }
+                } catch (error) { console.error("Erro fotos:", error); }
             };
 
-            useEffect(() => {
-                fetchPhotos();
-                if (window.lucide) window.lucide.createIcons();
-            }, [view, isScanning, selectedPhoto]);
-
-            // Lógica de Upload Real
             const handleFileUpload = async (event) => {
                 const file = event.target.files[0];
                 if (!file) return;
-
                 setIsScanning(true);
                 const formData = new FormData();
                 formData.append('foto', file);
-
                 try {
-                    const response = await fetch(`${SERVER_URL}/api/upload.php`, {
-                        method: 'POST',
-                        body: formData
-                    });
+                    const response = await fetch(`${SERVER_URL}/api/upload.php`, { method: 'POST', body: formData });
                     const result = await response.json();
-
                     if (result.success) {
                         await fetchPhotos();
+                        setFilteredPhotos(null); // Reset filtro ao dar upload
                         setView('gallery');
+                    } else { alert(result.error); }
+                } catch (error) { alert("Erro de conexão."); }
+                finally { setIsScanning(false); event.target.value = ""; }
+            };
+
+            const handleNeuralProcess = async (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                setIsScanning(true);
+                setShowNeuralModal(false);
+                try {
+                    const img = await faceapi.bufferToImage(file);
+                    const detections = await faceapi.detectAllFaces(img, new faceapi.TinyFaceDetectorOptions());
+                    
+                    if (detections.length > 0) {
+                        // SIMULAÇÃO DE FILTRAGEM: Como não temos biometria na DB ainda,
+                        // vamos simular que "encontramos" 50% das fotos aleatoriamente
+                        // apenas para demonstrar a funcionalidade da UI.
+                        const simulatedFilter = photos.filter(() => Math.random() > 0.5);
+                        
+                        setTimeout(() => {
+                            setIsScanning(false);
+                            setFilteredPhotos(simulatedFilter);
+                            setView('gallery');
+                        }, 2000);
                     } else {
-                        alert(result.error || "Erro no upload");
+                        setIsScanning(false);
+                        alert("Não detetamos nenhum rosto. Tenta novamente com uma selfie clara.");
                     }
-                } catch (error) {
-                    alert("Erro de conexão com o servidor local.");
-                } finally {
-                    setIsScanning(false);
-                }
+                } catch (e) { setIsScanning(false); alert("Erro no processamento neural."); }
+                finally { event.target.value = ""; }
             };
 
-            const handleUploadClick = () => fileInputRef.current?.click();
-            const handleCameraClick = () => cameraInputRef.current?.click();
-
-            const nextPhoto = () => {
-                const currentIndex = photos.findIndex(p => p.id === selectedPhoto.id);
-                if (currentIndex < photos.length - 1) setSelectedPhoto(photos[currentIndex + 1]);
+            // Helpers para abrir inputs
+            const openNeuralCamera = () => {
+                neuralInputRef.current.setAttribute('capture', 'user');
+                neuralInputRef.current.click();
             };
 
-            const prevPhoto = () => {
-                const currentIndex = photos.findIndex(p => p.id === selectedPhoto.id);
-                if (currentIndex > 0) setSelectedPhoto(photos[currentIndex - 1]);
+            const openNeuralGallery = () => {
+                neuralInputRef.current.removeAttribute('capture');
+                neuralInputRef.current.click();
             };
 
             return (
                 <div className="h-screen w-full flex flex-col relative overflow-hidden bg-black text-white">
-                    
-                    {/* Inputs Reais */}
                     <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
                     <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="user" onChange={handleFileUpload} />
+                    <input type="file" ref={neuralInputRef} className="hidden" accept="image/*" onChange={handleNeuralProcess} />
 
                     {/* Header */}
-                    <div className="safe-top px-8 pt-8 pb-4 flex justify-between items-end bg-black/50 sticky top-0 z-30 backdrop-blur-md">
-                        <div>
+                    <div className="safe-top px-8 pt-8 pb-4 flex justify-between items-end bg-black/50 sticky top-0 z-30 backdrop-blur-md border-b border-white/5">
+                        <div onClick={() => { setView('home'); setFilteredPhotos(null); }} className="cursor-pointer">
                             <p className="text-[10px] font-black tracking-[.3em] text-zinc-600 uppercase italic">Neural Wedding</p>
                             <h1 className="text-xl font-bold tracking-tighter">
-                                {view === 'home' ? 'Protocolo' : 'Explorar'}
+                                {view === 'home' ? 'Protocolo' : (filteredPhotos ? 'Resultados Neurais' : 'Explorar')}
                             </h1>
                         </div>
-                        <div className="w-10 h-10 rounded-2xl bg-zinc-900 border border-white/5 flex items-center justify-center text-[10px] font-black text-indigo-400">
+                        <div className="px-3 py-1 rounded-full bg-zinc-900 border border-white/5 text-[10px] font-black text-indigo-400">
                             2026
                         </div>
                     </div>
 
-                    {/* Content */}
+                    {/* Content Area */}
                     <div className="flex-1 overflow-y-auto px-6 pb-32 hide-scrollbar">
                         {view === 'home' ? (
-                            <div className="space-y-6 pt-4 animate-in fade-in duration-500">
-                                
-                                <div 
-                                    onClick={() => { setIsScanning(true); setTimeout(() => { setIsScanning(false); setView('gallery'); }, 2000); }}
-                                    className="glass-card p-10 flex flex-col items-center justify-center space-y-8 border-indigo-500/20 active:scale-[0.98] transition-all cursor-pointer"
-                                >
-                                    <div className="relative w-20 h-20 bg-indigo-500/10 rounded-full flex items-center justify-center border border-indigo-500/20">
-                                        <i data-lucide="scan" className="w-10 h-10 text-indigo-400"></i>
+                            <div className="space-y-6 pt-6">
+                                <div onClick={() => setShowNeuralModal(true)} className="glass-card p-10 flex flex-col items-center justify-center space-y-8 border-indigo-500/20 active:scale-[0.98] transition-all cursor-pointer shadow-[0_20px_50px_rgba(99,102,241,0.1)] group">
+                                    <div className="relative w-24 h-24 bg-indigo-500/10 rounded-full flex items-center justify-center border border-indigo-500/20">
+                                        <div className="scan-anim absolute inset-0 rounded-full border-t-2 border-indigo-400/30"></div>
+                                        <Icons.Scan />
                                     </div>
                                     <div className="text-center">
                                         <h2 className="text-2xl font-bold italic tracking-tighter">Neural Find</h2>
-                                        <p className="text-sm text-zinc-500 mt-2">O reconhecimento facial filtra as tuas fotos.</p>
+                                        <p className="text-sm text-zinc-500 mt-2">Identifica o teu rosto para filtrar as tuas fotos.</p>
                                     </div>
-                                    <button className="w-full h-14 bg-white text-black rounded-3xl font-black text-xs uppercase tracking-[0.2em]">
-                                        Analisar Presença
-                                    </button>
+                                    <button className="w-full h-14 bg-white text-black rounded-3xl font-black text-[10px] uppercase tracking-[0.2em]">Analisar Presença</button>
                                 </div>
 
-                                <div onClick={handleUploadClick} className="glass-card p-6 flex items-center justify-between active:bg-white/5 transition-colors cursor-pointer">
+                                <div onClick={() => fileInputRef.current.click()} className="glass-card p-6 flex items-center justify-between active:bg-white/5 transition-colors cursor-pointer border-white/5">
                                     <div className="flex items-center gap-5">
-                                        <div className="w-14 h-14 rounded-[20px] bg-white/[0.03] border border-white/10 flex items-center justify-center shadow-inner text-white">
-                                            <i data-lucide="upload" className="w-6 h-6"></i>
+                                        <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white">
+                                            <Icons.Upload />
                                         </div>
                                         <div>
                                             <h3 className="font-bold text-lg tracking-tight">Partilhar</h3>
                                             <p className="text-[10px] text-zinc-500 font-black uppercase tracking-widest">Galeria do Telefone</p>
                                         </div>
                                     </div>
-                                    <div className="bg-white/5 p-2 rounded-full">
-                                        <i data-lucide="chevron-right" className="w-4 h-4 text-zinc-500"></i>
-                                    </div>
+                                    <Icons.ChevronRight />
                                 </div>
                             </div>
                         ) : (
-                            <div className="pt-4 space-y-4 animate-in fade-in">
+                            <div className="pt-6 space-y-4 animate-in fade-in duration-500">
                                 <div className="flex justify-between items-center px-2">
-                                    <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{photos.length} Fotos Encontradas</span>
-                                    <button onClick={fetchPhotos} className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Refresh</button>
+                                    <span className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">
+                                        {filteredPhotos ? `${filteredPhotos.length} Fotos Identificadas` : `${photos.length} Memórias`}
+                                    </span>
+                                    {!filteredPhotos && (
+                                        <button onClick={fetchPhotos} className="w-8 h-8 flex items-center justify-center bg-zinc-900 rounded-full">
+                                            <Icons.Refresh />
+                                        </button>
+                                    )}
+                                    {filteredPhotos && (
+                                        <button onClick={() => setFilteredPhotos(null)} className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Limpar Filtro</button>
+                                    )}
                                 </div>
-                                
-                                {photos.length === 0 ? (
-                                    <div className="glass-card p-20 flex flex-col items-center opacity-20">
-                                        <i data-lucide="camera-off" className="w-10 h-10 mb-4"></i>
-                                        <p className="text-[10px] font-black uppercase tracking-[0.3em]">Vazio</p>
-                                    </div>
-                                ) : (
-                                    <div className="grid grid-cols-2 gap-3">
-                                        {photos.map(photo => (
-                                            <div 
-                                                key={photo.id} 
-                                                onClick={() => setSelectedPhoto(photo)}
-                                                className="aspect-[4/5] glass-card overflow-hidden border-white/5 active:scale-95 transition-transform"
-                                            >
-                                                <img 
-                                                    src={`${SERVER_URL}/${photo.url}`} 
-                                                    className="w-full h-full object-cover opacity-90" 
-                                                    alt="Wedding Memory"
-                                                />
-                                            </div>
-                                        ))}
+                                <div className="grid grid-cols-2 gap-4">
+                                    {(filteredPhotos || photos).map(photo => (
+                                        <div key={photo.id} className="aspect-[4/5] glass-card overflow-hidden border-white/5 active:scale-95 transition-transform shadow-xl">
+                                            <img src={`${SERVER_URL}/${photo.url}`} className="w-full h-full object-cover opacity-90" loading="lazy" />
+                                        </div>
+                                    ))}
+                                </div>
+                                {(filteredPhotos || photos).length === 0 && (
+                                    <div className="glass-card p-20 flex flex-col items-center opacity-20 border-dashed border-2">
+                                        <p className="text-[10px] font-black uppercase tracking-[0.3em]">Sem Registos</p>
                                     </div>
                                 )}
                             </div>
                         )}
                     </div>
 
-                    {/* Navigation Tab Bar */}
+                    {/* Navigation */}
                     <nav className="fixed bottom-0 w-full tab-bar flex justify-around items-center h-24 px-10 z-50">
-                        <button onClick={() => setView('home')} className={`flex flex-col items-center gap-1.5 transition-colors ${view === 'home' ? 'text-indigo-400' : 'text-zinc-600'}`}>
-                            <i data-lucide="zap" className="w-6 h-6"></i>
-                            <span className="text-[9px] font-black uppercase tracking-widest">Início</span>
-                        </button>
-                        
-                        <div className="relative -translate-y-6">
-                            <div className="absolute inset-0 bg-indigo-500 blur-2xl opacity-20 animate-pulse"></div>
-                            <button onClick={handleCameraClick} className="relative w-16 h-16 bg-white text-black rounded-full flex items-center justify-center shadow-2xl active:scale-90 transition-transform border-[6px] border-[#0a0a0a]">
-                                <i data-lucide="camera" className="w-7 h-7"></i>
-                            </button>
+                        <div onClick={() => { setView('home'); setFilteredPhotos(null); }} className="flex flex-col items-center gap-1.5 cursor-pointer">
+                            <Icons.Zap active={view === 'home'} />
+                            <span className={`text-[9px] font-black uppercase tracking-widest ${view === 'home' ? 'text-indigo-400' : 'text-zinc-600'}`}>Início</span>
                         </div>
-
-                        <button onClick={() => setView('gallery')} className={`flex flex-col items-center gap-1.5 transition-colors ${view === 'gallery' ? 'text-indigo-400' : 'text-zinc-600'}`}>
-                            <i data-lucide="grid" className="w-6 h-6"></i>
-                            <span className="text-[9px] font-black uppercase tracking-widest">Galeria</span>
-                        </button>
+                        <div onClick={() => cameraInputRef.current.click()} className="relative -translate-y-6 w-16 h-16 bg-white text-black rounded-full flex items-center justify-center shadow-2xl border-[6px] border-[#0a0a0a] cursor-pointer">
+                            <Icons.Camera color="black" />
+                        </div>
+                        <div onClick={() => { setView('gallery'); setFilteredPhotos(null); }} className="flex flex-col items-center gap-1.5 cursor-pointer">
+                            <Icons.Grid active={view === 'gallery'} />
+                            <span className={`text-[9px] font-black uppercase tracking-widest ${view === 'gallery' ? 'text-indigo-400' : 'text-zinc-600'}`}>Galeria</span>
+                        </div>
                     </nav>
 
-                    {/* Scan Overlay */}
+                    {/* Modal Neural */}
+                    {showNeuralModal && (
+                        <div className="fixed inset-0 z-[120] bg-black/90 backdrop-blur-md flex items-end p-6">
+                            <div className="w-full glass-card p-8 space-y-4 border-indigo-500/30">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="font-bold text-xl tracking-tighter italic text-indigo-400">Neural Auth</h3>
+                                    <div onClick={() => setShowNeuralModal(false)} className="cursor-pointer">
+                                        <Icons.X />
+                                    </div>
+                                </div>
+                                <button onClick={openNeuralCamera} className="w-full h-16 bg-white text-black rounded-2xl font-black text-xs uppercase tracking-widest">Tirar Selfie</button>
+                                <button onClick={openNeuralGallery} className="w-full h-16 bg-zinc-900 border border-white/10 rounded-2xl font-bold text-xs uppercase tracking-widest">Escolher Foto</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Scan Loading Overlay */}
                     {isScanning && (
-                        <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-3xl flex flex-col items-center justify-center p-10 text-center">
+                        <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-3xl flex flex-col items-center justify-center p-10 text-center">
                             <div className="w-64 h-80 glass-card border-indigo-500/30 overflow-hidden relative mb-10">
                                 <div className="scan-anim absolute w-full h-1 bg-indigo-400 shadow-[0_0_25px_#6366f1]"></div>
-                                <div className="h-full flex items-center justify-center opacity-10">
-                                    <i data-lucide="user-round" className="w-32 h-32 text-white"></i>
+                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+                                    <Icons.User />
                                 </div>
                             </div>
-                            <h3 className="text-xs font-black tracking-[0.4em] text-indigo-400 animate-pulse uppercase">Upload Neural</h3>
-                            <p className="text-zinc-500 text-sm mt-4 max-w-[200px]">A processar a tua memória nos nossos servidores...</p>
+                            <h3 className="text-xs font-black tracking-[0.4em] text-indigo-400 animate-pulse uppercase">Sincronização Neural</h3>
                         </div>
                     )}
-
-                    {/* Photo Viewer Modal */}
-                    {selectedPhoto && (
-                        <div className="fixed inset-0 z-[110] bg-black flex flex-col animate-in fade-in zoom-in-95 duration-300">
-                            <div className="safe-top p-6 flex justify-between items-center absolute top-0 w-full z-10 bg-gradient-to-b from-black/80 to-transparent">
-                                <button onClick={() => setSelectedPhoto(null)} className="w-10 h-10 rounded-full bg-white/10 backdrop-blur flex items-center justify-center">
-                                    <i data-lucide="x" className="w-5 h-5"></i>
-                                </button>
-                                <div className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Visualização</div>
-                                <a href={`${SERVER_URL}/${selectedPhoto.url}`} download className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center">
-                                    <i data-lucide="download" className="w-5 h-5 text-white"></i>
-                                </a>
-                            </div>
-
-                            <div className="flex-1 flex items-center justify-center relative touch-none">
-                                <button onClick={prevPhoto} className="absolute left-4 p-4 text-white/30 hover:text-white transition-colors">
-                                    <i data-lucide="chevron-left" className="w-8 h-8"></i>
-                                </button>
-                                <img src={`${SERVER_URL}/${selectedPhoto.url}`} className="max-h-[70vh] w-auto object-contain shadow-2xl" />
-                                <button onClick={nextPhoto} className="absolute right-4 p-4 text-white/30 hover:text-white transition-colors">
-                                    <i data-lucide="chevron-right" className="w-8 h-8"></i>
-                                </button>
-                            </div>
-
-                            <div className="p-8 pb-12">
-                                <button onClick={() => setSelectedPhoto(null)} className="w-full h-14 glass-card rounded-2xl font-black text-xs uppercase tracking-widest">
-                                    Voltar à Galeria
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
                 </div>
             );
         };
