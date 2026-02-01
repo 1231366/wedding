@@ -3,243 +3,242 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Wedding AI | Boutique</title>
+    <title>Wedding AI | Boutique Experience</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;600;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@100;400;900&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
-    
     <style>
         body { font-family: 'Geist', sans-serif; background: #000; color: #fff; overflow: hidden; margin: 0; }
-        .glass-card {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            backdrop-filter: blur(25px);
-            border-radius: 35px;
-        }
-        .tab-bar {
-            padding-bottom: env(safe-area-inset-bottom);
-            background: rgba(10, 10, 10, 0.85);
-            backdrop-filter: blur(20px);
-            border-top: 1px solid rgba(255, 255, 255, 0.05);
-        }
+        .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(25px); border: 1px solid rgba(255, 255, 255, 0.08); }
+        .tab-bar { padding-bottom: env(safe-area-inset-bottom); background: rgba(10, 10, 10, 0.85); backdrop-filter: blur(20px); border-top: 1px solid rgba(255, 255, 255, 0.05); }
+        
+        /* Biometria */
+        .kyc-frame { border: 2px solid rgba(99, 102, 241, 0.4); border-radius: 40px; position: relative; overflow: hidden; aspect-ratio: 3/4; }
+        .kyc-scan-line { position: absolute; width: 100%; height: 4px; background: linear-gradient(to bottom, transparent, #6366f1); box-shadow: 0 0 20px #6366f1; animation: kyc-scan 3s infinite ease-in-out; z-index: 20; }
+        @keyframes kyc-scan { 0%, 100% { top: 0%; opacity: 0; } 50% { top: 100%; opacity: 1; } }
+        
+        /* Grelha - Removida a transição "horrível" para ser instantânea */
+        .photo-grid { display: grid; gap: 8px; }
+        
+        .no-scrollbar::-webkit-scrollbar { display: none; }
         .safe-top { padding-top: env(safe-area-inset-top); }
-        .scan-anim { animation: scan 2.5s infinite linear; }
-        @keyframes scan {
-            0% { top: 0%; opacity: 0; }
-            50% { opacity: 1; }
-            100% { top: 100%; opacity: 0; }
-        }
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .animate-float { animation: float 3s ease-in-out infinite; }
-        @keyframes float {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-10px); }
-        }
+        .photo-viewer-content { max-width: 100%; max-height: 75vh; object-fit: contain; }
     </style>
 </head>
 <body>
     <div id="root"></div>
-
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
-
         const SERVER_URL = "http://localhost/wedding"; 
 
         const Icons = {
-            Scan: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-10 h-10 text-indigo-400 animate-float"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><polyline points="7 7 12 12 17 7"/><polyline points="7 17 12 12 17 17"/></svg>,
-            Upload: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
-            ChevronRight: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-zinc-600"><polyline points="9 18 15 12 9 6"/></svg>,
-            Zap: ({ active }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`w-6 h-6 ${active ? 'text-indigo-400' : 'text-zinc-600'}`}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
-            Camera: ({ color = "currentColor" }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-7 h-7"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>,
-            Grid: ({ active }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`w-6 h-6 ${active ? 'text-indigo-400' : 'text-zinc-600'}`}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>,
-            Refresh: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3 text-indigo-400"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>,
-            X: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
-            User: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-32 h-32 text-white opacity-10"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            Scan: () => <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-indigo-400"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/></svg>,
+            Download: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>,
+            Share: () => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>,
+            Camera: () => <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>,
+            Zap: ({ active }) => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={active ? "#818cf8" : "#52525b"} strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
+            Grid: ({ active }) => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={active ? "#818cf8" : "#52525b"} strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>,
+            X: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>,
+            Chevron: ({ left }) => <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{transform: left ? 'rotate(180deg)' : ''}}><polyline points="9 18 15 12 9 6"/></svg>
         };
 
         const App = () => {
             const [view, setView] = useState('home');
-            const [isScanning, setIsScanning] = useState(false);
             const [photos, setPhotos] = useState([]);
-            const [filteredPhotos, setFilteredPhotos] = useState(null); // Estado para fotos filtradas
-            const [showNeuralModal, setShowNeuralModal] = useState(false);
+            const [filteredPhotos, setFilteredPhotos] = useState(null);
+            const [isScanning, setIsScanning] = useState(false);
+            const [showKYC, setShowKYC] = useState(false);
+            const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(null);
+            const [gridCols, setGridCols] = useState(2);
             
-            const fileInputRef = useRef(null);
-            const cameraInputRef = useRef(null);
-            const neuralInputRef = useRef(null);
+            const videoRef = useRef(null);
+            const multiUploadRef = useRef(null);
 
             useEffect(() => {
-                const loadModels = async () => {
-                    try {
-                        const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
-                        await Promise.all([
-                            faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-                            faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-                            faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
-                        ]);
-                    } catch (e) { console.error("Erro IA:", e); }
+                const init = async () => {
+                    const URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+                    await Promise.all([
+                        faceapi.nets.ssdMobilenetv1.loadFromUri(URL),
+                        faceapi.nets.faceLandmark68Net.loadFromUri(URL),
+                        faceapi.nets.faceRecognitionNet.loadFromUri(URL)
+                    ]);
+                    fetchPhotos();
                 };
-                loadModels();
-                fetchPhotos();
+                init();
             }, []);
 
             const fetchPhotos = async () => {
                 try {
-                    const response = await fetch(`${SERVER_URL}/api/photos.php`);
-                    const data = await response.json();
-                    if (Array.isArray(data)) {
-                        setPhotos(data);
-                    }
-                } catch (error) { console.error("Erro fotos:", error); }
+                    const res = await fetch(`${SERVER_URL}/api/photos.php`);
+                    const data = await res.json();
+                    setPhotos(data || []);
+                } catch(e) { console.error("Erro fetch"); }
             };
 
-            const handleFileUpload = async (event) => {
-                const file = event.target.files[0];
-                if (!file) return;
+            const handleUploadProcess = async (files) => {
                 setIsScanning(true);
                 const formData = new FormData();
-                formData.append('foto', file);
-                try {
-                    const response = await fetch(`${SERVER_URL}/api/upload.php`, { method: 'POST', body: formData });
-                    const result = await response.json();
-                    if (result.success) {
-                        await fetchPhotos();
-                        setFilteredPhotos(null); // Reset filtro ao dar upload
-                        setView('gallery');
-                    } else { alert(result.error); }
-                } catch (error) { alert("Erro de conexão."); }
-                finally { setIsScanning(false); event.target.value = ""; }
+                for (const f of files) {
+                    const img = await faceapi.bufferToImage(f);
+                    const det = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+                    formData.append('fotos[]', f);
+                    formData.append('descriptors[]', det ? JSON.stringify(Array.from(det.descriptor)) : "");
+                }
+                await fetch(`${SERVER_URL}/api/upload.php`, { method: 'POST', body: formData });
+                fetchPhotos();
+                setIsScanning(false);
+                setView('gallery');
             };
 
-            const handleNeuralProcess = async (event) => {
-                const file = event.target.files[0];
-                if (!file) return;
+            const processKYC = async () => {
                 setIsScanning(true);
-                setShowNeuralModal(false);
-                try {
-                    const img = await faceapi.bufferToImage(file);
-                    const detections = await faceapi.detectAllFaces(img, new faceapi.TinyFaceDetectorOptions());
-                    
-                    if (detections.length > 0) {
-                        // SIMULAÇÃO DE FILTRAGEM: Como não temos biometria na DB ainda,
-                        // vamos simular que "encontramos" 50% das fotos aleatoriamente
-                        // apenas para demonstrar a funcionalidade da UI.
-                        const simulatedFilter = photos.filter(() => Math.random() > 0.5);
-                        
-                        setTimeout(() => {
-                            setIsScanning(false);
-                            setFilteredPhotos(simulatedFilter);
-                            setView('gallery');
-                        }, 2000);
-                    } else {
-                        setIsScanning(false);
-                        alert("Não detetamos nenhum rosto. Tenta novamente com uma selfie clara.");
-                    }
-                } catch (e) { setIsScanning(false); alert("Erro no processamento neural."); }
-                finally { event.target.value = ""; }
+                const detection = await faceapi.detectSingleFace(videoRef.current).withFaceLandmarks().withFaceDescriptor();
+                if (videoRef.current.srcObject) videoRef.current.srcObject.getTracks().forEach(t => t.stop());
+
+                if (!detection) {
+                    alert("Rosto não detetado");
+                } else {
+                    const userDesc = detection.descriptor;
+                    const matches = photos.filter(p => {
+                        if (!p.descriptor) return false;
+                        const d = faceapi.euclideanDistance(userDesc, new Float32Array(Object.values(JSON.parse(p.descriptor))));
+                        return d < 0.6;
+                    });
+                    setFilteredPhotos(matches);
+                    setView('gallery');
+                }
+                setIsScanning(false);
+                setShowKYC(false);
             };
 
-            // Helpers para abrir inputs
-            const openNeuralCamera = () => {
-                neuralInputRef.current.setAttribute('capture', 'user');
-                neuralInputRef.current.click();
-            };
-
-            const openNeuralGallery = () => {
-                neuralInputRef.current.removeAttribute('capture');
-                neuralInputRef.current.click();
-            };
+            const currentList = filteredPhotos || photos;
 
             return (
-                <div className="h-screen w-full flex flex-col relative overflow-hidden bg-black text-white">
-                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
-                    <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="user" onChange={handleFileUpload} />
-                    <input type="file" ref={neuralInputRef} className="hidden" accept="image/*" onChange={handleNeuralProcess} />
+                <div className="h-screen w-full flex flex-col bg-black">
+                    <input type="file" multiple ref={multiUploadRef} className="hidden" onChange={(e) => handleUploadProcess(Array.from(e.target.files))} />
 
                     {/* Header */}
-                    <div className="safe-top px-8 pt-8 pb-4 flex justify-between items-end bg-black/50 sticky top-0 z-30 backdrop-blur-md border-b border-white/5">
-                        <div onClick={() => { setView('home'); setFilteredPhotos(null); }} className="cursor-pointer">
+                    <div className="safe-top px-8 pt-8 pb-4 flex justify-between items-end border-b border-white/5 bg-black/50 backdrop-blur-md sticky top-0 z-30">
+                        <div onClick={() => {setView('home'); setFilteredPhotos(null);}}>
                             <p className="text-[10px] font-black tracking-[.3em] text-zinc-600 uppercase italic">Neural Wedding</p>
-                            <h1 className="text-xl font-bold tracking-tighter">
-                                {view === 'home' ? 'Protocolo' : (filteredPhotos ? 'Resultados Neurais' : 'Explorar')}
-                            </h1>
+                            <h1 className="text-xl font-bold tracking-tighter">{view === 'home' ? 'Protocolo' : 'Galeria'}</h1>
                         </div>
-                        <div className="px-3 py-1 rounded-full bg-zinc-900 border border-white/5 text-[10px] font-black text-indigo-400">
-                            2026
-                        </div>
-                    </div>
-
-                    {/* Content Area */}
-                    <div className="flex-1 overflow-y-auto px-6 pb-32 hide-scrollbar">
-                        {view === 'home' ? (
-                            <div className="space-y-6 pt-6">
-                                <div onClick={() => setShowNeuralModal(true)} className="glass-card p-10 flex flex-col items-center justify-center space-y-8 border-indigo-500/20 active:scale-[0.98] transition-all cursor-pointer shadow-[0_20px_50px_rgba(99,102,241,0.1)] group">
-                                    <div className="relative w-24 h-24 bg-indigo-500/10 rounded-full flex items-center justify-center border border-indigo-500/20">
-                                        <div className="scan-anim absolute inset-0 rounded-full border-t-2 border-indigo-400/30"></div>
-                                        <Icons.Scan />
-                                    </div>
-                                    <div className="text-center">
-                                        <h2 className="text-2xl font-bold italic tracking-tighter">Neural Find</h2>
-                                        <p className="text-sm text-zinc-500 mt-2">Identifica o teu rosto para filtrar as tuas fotos.</p>
-                                    </div>
-                                    <button className="w-full h-14 bg-white text-black rounded-3xl font-black text-[10px] uppercase tracking-[0.2em]">Analisar Presença</button>
-                                </div>
-
-                                <div onClick={() => fileInputRef.current.click()} className="glass-card p-6 flex items-center justify-between active:bg-white/5 transition-colors cursor-pointer border-white/5">
-                                    <div className="flex items-center gap-5">
-                                        <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white">
-                                            <Icons.Upload />
-                                        </div>
-                                        <div>
-                                            <h3 className="font-bold text-lg tracking-tight">Partilhar</h3>
-                                            <p className="text-[10px] text-zinc-500 font-black uppercase tracking-widest">Galeria do Telefone</p>
-                                        </div>
-                                    </div>
-                                    <Icons.ChevronRight />
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="pt-6 space-y-4 animate-in fade-in duration-500">
-                                <div className="flex justify-between items-center px-2">
-                                    <span className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">
-                                        {filteredPhotos ? `${filteredPhotos.length} Fotos Identificadas` : `${photos.length} Memórias`}
-                                    </span>
-                                    {!filteredPhotos && (
-                                        <button onClick={fetchPhotos} className="w-8 h-8 flex items-center justify-center bg-zinc-900 rounded-full">
-                                            <Icons.Refresh />
-                                        </button>
-                                    )}
-                                    {filteredPhotos && (
-                                        <button onClick={() => setFilteredPhotos(null)} className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Limpar Filtro</button>
-                                    )}
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    {(filteredPhotos || photos).map(photo => (
-                                        <div key={photo.id} className="aspect-[4/5] glass-card overflow-hidden border-white/5 active:scale-95 transition-transform shadow-xl">
-                                            <img src={`${SERVER_URL}/${photo.url}`} className="w-full h-full object-cover opacity-90" loading="lazy" />
-                                        </div>
-                                    ))}
-                                </div>
-                                {(filteredPhotos || photos).length === 0 && (
-                                    <div className="glass-card p-20 flex flex-col items-center opacity-20 border-dashed border-2">
-                                        <p className="text-[10px] font-black uppercase tracking-[0.3em]">Sem Registos</p>
-                                    </div>
-                                )}
+                        {view === 'gallery' && (
+                            <div className="flex gap-2">
+                                <button onClick={() => setGridCols(gridCols === 2 ? 4 : gridCols === 4 ? 1 : 2)} className="p-2 glass rounded-lg text-indigo-400">
+                                    <Icons.Grid active={true} />
+                                </button>
+                                <button onClick={() => {
+                                    currentList.forEach((p, i) => {
+                                        setTimeout(() => {
+                                            const a = document.createElement('a');
+                                            a.href = `${SERVER_URL}/${p.url}`;
+                                            a.download = `photo_${p.id}.jpg`;
+                                            a.click();
+                                        }, i * 300);
+                                    });
+                                }} className="p-2 glass rounded-lg text-white"><Icons.Download /></button>
                             </div>
                         )}
                     </div>
 
-                    {/* Navigation */}
+                    {/* Main Area */}
+                    <div className="flex-1 overflow-y-auto px-4 pb-32 no-scrollbar">
+                        {view === 'home' ? (
+                            <div className="space-y-6 pt-6 px-4">
+                                <div onClick={() => {
+                                    setShowKYC(true);
+                                    navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+                                        .then(stream => { if(videoRef.current) videoRef.current.srcObject = stream; });
+                                }} className="glass p-10 rounded-[40px] flex flex-col items-center border-indigo-500/20 active:scale-95 transition-all">
+                                    <Icons.Scan />
+                                    <h2 className="text-xl font-black italic mt-4 uppercase">Neural Find</h2>
+                                    <p className="text-xs text-zinc-500 text-center mt-2">Identifique-se para encontrar as suas fotos.</p>
+                                </div>
+                                <div onClick={() => multiUploadRef.current.click()} className="glass p-6 rounded-3xl flex items-center justify-between active:bg-white/5 transition-all">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center"><Icons.Share /></div>
+                                        <span className="font-bold">Partilhar Memórias</span>
+                                    </div>
+                                    <span className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest italic">UPLOAD</span>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="pt-4">
+                                {filteredPhotos && (
+                                    <div className="flex justify-between items-center mb-6 px-2">
+                                        <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">{filteredPhotos.length} Resultados</span>
+                                        <button onClick={() => setFilteredPhotos(null)} className="text-[10px] font-bold text-zinc-500 underline uppercase italic">Ver Todas</button>
+                                    </div>
+                                )}
+                                <div className="photo-grid" style={{gridTemplateColumns: `repeat(${gridCols}, 1fr)`}}>
+                                    {currentList.map((p, i) => (
+                                        <div key={p.id} onClick={() => setSelectedPhotoIndex(i)} className="aspect-[4/5] rounded-xl overflow-hidden glass">
+                                            <img src={`${SERVER_URL}/${p.url}`} className="w-full h-full object-cover" loading="lazy" />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Biometria */}
+                    {showKYC && (
+                        <div className="fixed inset-0 z-[100] bg-black p-6 flex flex-col justify-center items-center">
+                            <div className="w-full max-w-sm">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h3 className="text-xs font-black text-indigo-400 uppercase tracking-widest italic">Biometric Scan</h3>
+                                    <button onClick={() => {
+                                        if (videoRef.current?.srcObject) videoRef.current.srcObject.getTracks().forEach(t => t.stop());
+                                        setShowKYC(false);
+                                    }}><Icons.X /></button>
+                                </div>
+                                <div className="kyc-frame glass shadow-[0_0_80px_rgba(99,102,241,0.2)]">
+                                    <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover grayscale" />
+                                    <div className="kyc-scan-line"></div>
+                                </div>
+                                <button onClick={processKYC} className="w-full mt-8 h-16 bg-white text-black rounded-3xl font-black uppercase text-xs tracking-[0.2em]">Analisar</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Slider / Visualizador */}
+                    {selectedPhotoIndex !== null && (
+                        <div className="fixed inset-0 z-[200] bg-black/98 flex flex-col justify-between py-12">
+                            <div className="w-full px-8 flex justify-between items-center">
+                                <span className="text-[10px] font-black text-zinc-500">{selectedPhotoIndex + 1} / {currentList.length}</span>
+                                <button onClick={() => setSelectedPhotoIndex(null)} className="p-2 glass rounded-full"><Icons.X /></button>
+                            </div>
+                            
+                            <div className="relative flex-1 flex items-center justify-center p-4">
+                                <button onClick={() => setSelectedPhotoIndex(Math.max(0, selectedPhotoIndex - 1))} className="absolute left-4 z-10 p-3 glass rounded-full opacity-60"><Icons.Chevron left /></button>
+                                <img src={`${SERVER_URL}/${currentList[selectedPhotoIndex].url}`} className="photo-viewer-content rounded-2xl shadow-2xl" />
+                                <button onClick={() => setSelectedPhotoIndex(Math.min(currentList.length - 1, selectedPhotoIndex + 1))} className="absolute right-4 z-10 p-3 glass rounded-full opacity-60"><Icons.Chevron /></button>
+                            </div>
+
+                            <div className="flex justify-center gap-10 px-12">
+                                <button onClick={() => {
+                                    const a = document.createElement('a');
+                                    a.href = `${SERVER_URL}/${currentList[selectedPhotoIndex].url}`;
+                                    a.download = `wedding_${currentList[selectedPhotoIndex].id}.jpg`;
+                                    a.click();
+                                }} className="p-5 glass rounded-full"><Icons.Download /></button>
+                                <button className="p-5 glass rounded-full"><Icons.Share /></button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Menu Inferior Original */}
                     <nav className="fixed bottom-0 w-full tab-bar flex justify-around items-center h-24 px-10 z-50">
                         <div onClick={() => { setView('home'); setFilteredPhotos(null); }} className="flex flex-col items-center gap-1.5 cursor-pointer">
                             <Icons.Zap active={view === 'home'} />
                             <span className={`text-[9px] font-black uppercase tracking-widest ${view === 'home' ? 'text-indigo-400' : 'text-zinc-600'}`}>Início</span>
                         </div>
-                        <div onClick={() => cameraInputRef.current.click()} className="relative -translate-y-6 w-16 h-16 bg-white text-black rounded-full flex items-center justify-center shadow-2xl border-[6px] border-[#0a0a0a] cursor-pointer">
-                            <Icons.Camera color="black" />
+                        <div onClick={() => multiUploadRef.current.click()} className="relative -translate-y-6 w-16 h-16 bg-white text-black rounded-full flex items-center justify-center shadow-2xl border-[6px] border-[#0a0a0a] cursor-pointer active:scale-90 transition-transform">
+                            <Icons.Camera />
                         </div>
                         <div onClick={() => { setView('gallery'); setFilteredPhotos(null); }} className="flex flex-col items-center gap-1.5 cursor-pointer">
                             <Icons.Grid active={view === 'gallery'} />
@@ -247,38 +246,16 @@
                         </div>
                     </nav>
 
-                    {/* Modal Neural */}
-                    {showNeuralModal && (
-                        <div className="fixed inset-0 z-[120] bg-black/90 backdrop-blur-md flex items-end p-6">
-                            <div className="w-full glass-card p-8 space-y-4 border-indigo-500/30">
-                                <div className="flex justify-between items-center mb-4">
-                                    <h3 className="font-bold text-xl tracking-tighter italic text-indigo-400">Neural Auth</h3>
-                                    <div onClick={() => setShowNeuralModal(false)} className="cursor-pointer">
-                                        <Icons.X />
-                                    </div>
-                                </div>
-                                <button onClick={openNeuralCamera} className="w-full h-16 bg-white text-black rounded-2xl font-black text-xs uppercase tracking-widest">Tirar Selfie</button>
-                                <button onClick={openNeuralGallery} className="w-full h-16 bg-zinc-900 border border-white/10 rounded-2xl font-bold text-xs uppercase tracking-widest">Escolher Foto</button>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Scan Loading Overlay */}
+                    {/* Loading */}
                     {isScanning && (
-                        <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-3xl flex flex-col items-center justify-center p-10 text-center">
-                            <div className="w-64 h-80 glass-card border-indigo-500/30 overflow-hidden relative mb-10">
-                                <div className="scan-anim absolute w-full h-1 bg-indigo-400 shadow-[0_0_25px_#6366f1]"></div>
-                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-                                    <Icons.User />
-                                </div>
-                            </div>
-                            <h3 className="text-xs font-black tracking-[0.4em] text-indigo-400 animate-pulse uppercase">Sincronização Neural</h3>
+                        <div className="fixed inset-0 z-[300] bg-black/95 flex flex-col items-center justify-center">
+                            <div className="w-16 h-16 border-t-2 border-indigo-500 rounded-full animate-spin"></div>
+                            <h3 className="text-[10px] font-black text-indigo-400 mt-6 uppercase animate-pulse">Sincronização Neural</h3>
                         </div>
                     )}
                 </div>
             );
         };
-
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
